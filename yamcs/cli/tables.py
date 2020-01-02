@@ -67,16 +67,26 @@ class TablesCommand(utils.Command):
             if args.dir:
                 path = os.path.join(args.dir, path)
             with gzip.open(path, 'wb') as f:
-                size = 0
-                t1 = time.time()
+                txsize = 0
+                t0 = time.time()
+                t = t0
+                prev_t = None
                 for chunk in archive.dump_table(table):
-                    size += f.write(chunk)
-                    t2 = time.time()
-                    rate = (size / 1024 / 1024) / (t2 - t1)
-                    stdout.write('\r{}: {} MB/s'.format(table, round(rate, 2)))
-                    stdout.flush()
-                if size > 0:
+                    txsize += f.write(chunk)
+                    t = time.time()
+                    if not prev_t or (t - prev_t > 0.5):  # Limit console writes
+                        self.report_dump_stats(table, path, txsize, t - t0)
+                        prev_t = t
+                if txsize > 0:
+                    self.report_dump_stats(table, path, txsize, t - t0)
                     stdout.write('\n')
+
+    def report_dump_stats(self, table, path, txsize, elapsed):
+        fsize = os.path.getsize(path)
+        rate = (txsize / 1024 / 1024) / elapsed
+        stdout.write('\r{}: {:.2f} MB (rx: {:.2f} MB at {:.2f} MB/s)'.format(
+                     table, fsize / 1024 / 1024, txsize / 1024 / 1024, rate))
+        stdout.flush()
 
     def load(self, args):
         opts = utils.CommandOptions(args)
